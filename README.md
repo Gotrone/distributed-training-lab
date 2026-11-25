@@ -11,7 +11,7 @@ Fine-tune **DistilBERT** for extractive question answering on a subset of **SQuA
 | Folder | Description |
 |---|---|
 | [`BASELINE/`](BASELINE) | Single-GPU fine-tuning (Hugging Face Transformers, PyTorch): data preprocessing, training loop, per-epoch evaluation (Exact Match, F1). |
-| [`DISTRIBUTED/`](DISTRIBUTED) | PyTorch Lightning version with Distributed Data Parallel: `LightningDataModule` with distributed samplers, `LightningModule`, SLURM submission script for 2 nodes × 2 A100 GPUs. |
+| [`DISTRIBUTED/`](DISTRIBUTED) | PyTorch Lightning version with Distributed Data Parallel: `train_ddp.py` (Lightning DataModule + Module, gathered validation metrics) and a SLURM script for 2 nodes × 2 A100 GPUs. Written, not yet run on a cluster. |
 
 ## Baseline results (single GPU)
 
@@ -27,8 +27,8 @@ About 15 s of training per epoch, 5 min 36 s end to end.
 
 ## Roadmap
 
-- Update the distributed data loader to the current PyTorch Lightning API and run the 2-node benchmark.
-- Compare training time and speedup against the baseline.
+- Run `train_ddp.py` on a GPU cluster (1 GPU, 1×2, 2×2) and record training time and accuracy.
+- Compare speedup against the baseline.
 
 ## Tech stack
 

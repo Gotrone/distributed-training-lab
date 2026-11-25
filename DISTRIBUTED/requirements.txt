@@ -1,0 +1,6 @@
+torch
+lightning>=2.2
+transformers
+datasets
+evaluate
+numpy

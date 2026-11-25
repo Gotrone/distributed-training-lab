@@ -1,75 +1,29 @@
-# Lab AI - HPC Tools - Deliverable 2: Distributed Implementation
+# Distributed version (PyTorch Lightning, DDP)
 
-## Project Overview
- 
-The objective of this deliverable is to accelerate the training of a Deep Learning model by implementing a distributed version of the baseline code from Deliverable 1. We utilize PyTorch Lightning with Distributed Data Parallel (DDP) strategy to train the DistilBERT model on the SQuAD dataset across multiple GPUs and nodes. The goal is to measure the speedup achieved through distributed training compared to the baseline single-GPU implementation.
-Modifications for Distributed Implementation
+Multi-GPU, multi-node version of the single-GPU [baseline](../BASELINE): DistilBERT fine-tuning for extractive question answering on SQuAD.
 
-## Choice of Framework and Strategy
+## Status
 
-    Framework: PyTorch Lightning is used to simplify the training loop and handle distributed training seamlessly.
-    Distributed Strategy: Distributed Data Parallel (DDP) is chosen for its efficiency and scalability across multiple GPUs and nodes.
+The script is written but **has not been run on a cluster yet**, so no speedup is reported. The multi-node benchmark (2 nodes × 2 A100, via `bash.sh`) is the remaining step.
 
-## Data Preprocessing Functions
+## Design
 
-    train_data_preprocess(examples): Tokenizes and processes training data, aligning answer spans with token positions.
-    preprocess_validation_examples(examples): Processes validation data, handling offset mappings for evaluation.
+| Component (`train_ddp.py`) | Role |
+|---|---|
+| `SquadDataModule` | Downloads and tokenizes SQuAD (1,000 train / 250 validation questions by default). Lightning swaps in a `DistributedSampler`, so each process trains on its own shard. |
+| `QAModel` | `LightningModule` around `DistilBertForQuestionAnswering` (AdamW, lr 2e-5). Validation logits are gathered from all processes and Exact Match / F1 are computed on rank 0. |
+| `Timer` | Measures total training time, written with the metrics to `results.json`. |
+| `bash.sh` | SLURM script: 2 nodes, 2 GPUs per node, one task per GPU, NCCL. |
 
-## Custom Dataset Class
+The batch size is per GPU, so the global batch size grows with the number of GPUs (default 2 per GPU). Keep this in mind when comparing accuracy with the baseline.
 
-    DataQA: A subclass of torch.utils.data.Dataset that prepares data samples for training and validation modes.
+## Run
 
-## Custom Data Collator
+```bash
+pip install -r requirements.txt
+python train_ddp.py --nodes 1 --devices 1     # single GPU, comparable to the baseline
+python train_ddp.py --nodes 1 --devices 2     # one node, DDP on 2 GPUs
+sbatch bash.sh                                # 2 nodes x 2 GPUs on SLURM
+```
 
-    custom_data_collator(features): Defines how to collate data batches, managing both training and validation scenarios.
-
-## Data Module
-
-    QADataModule: Inherits from pl.LightningDataModule, handles data loading, and sets up distributed samplers for multi-GPU training.
-
-## Lightning Module
-
-    QAModel: Inherits from pl.LightningModule, encapsulates the model logic, including forward pass, training step, validation step, and optimizer configuration.
-    Utilizes DistilBertForQuestionAnswering from Hugging Face as the base model.
-    Implements evaluation metrics using the evaluate library and handles prediction post-processing.
-
-## Main Function
-
-    Loads and preprocesses the SQuAD dataset.
-    Initializes tokenizer, datasets, data modules, and the model.
-    Sets up the PyTorch Lightning Trainer with distributed data parallel (DDP) strategy for multi-node and multi-GPU training.
-    Starts the training process with trainer.fit().
-
-## SLURM Submission Script (bash.sh)
-
-    Specifies resource allocation for SLURM:
-        2 nodes, each with 2 GPUs.
-        Allocates CPUs and memory per node.
-        Sets the job's time limit and output log file.
-
-    Activates the Python environment.
-    Sets NCCL parameters for efficient multi-node GPU communication.
-    Launches the training script using srun.
-
-## Error Encountered
-
-While running the script, an error occurs:
-
-    AttributeError: module 'pytorch_lightning.utilities.data' has no attribute 'fetching'
-
-This error arises in the QADataModule class within the train_dataloader method:
-
-
-    def train_dataloader(self):
-        sampler = DistributedSampler(self.train_dataset) if self.trainer.num_devices > 1 else None
-        return DataLoader(
-            self.train_dataset,
-            batch_size=self.batch_size,
-            sampler=sampler,
-            collate_fn=pl.utilities.data.fetching.default_collate,  # Using default collate for tensors
-            num_workers=self.num_workers,
-        )
-
-Current Situation
-
-    We have encountered this error and are unsure how to resolve it.
+Compute nodes without internet need the dataset, model and `squad` metric cached beforehand (run `prepare_data` on a login node).
